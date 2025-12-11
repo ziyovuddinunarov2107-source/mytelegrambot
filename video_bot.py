@@ -1,66 +1,60 @@
 import os
 import yt_dlp
-from aiogram import Bot, Dispatcher, types
-from aiogram.filters import Command
-from aiogram.types import Message, FSInputFile
-import asyncio
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
-BOT_TOKEN = "8288599599:AAFSh94H0ODyuNyE9LndZy7lGotimeoCAvk"
+TOKEN = "8587053118:AAEt3SN-HgNSVjVvemt95UNF9-mCiOCu2KI"
 
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
 
-# --- Helper function to download video ---
-def download_video(url):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Send me any YouTube or Instagram video link.")
+
+
+async def download_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    url = update.message.text.strip()
+
+    await update.message.reply_text("Downloading, please wait...")
+
+    # Output file name
+    output_file = "downloaded_video.mp4"
+
+    # yt-dlp settings
+    ydl_opts = {
+        "outtmpl": output_file,
+        "format": "bestvideo+bestaudio/best",
+        "merge_output_format": "mp4",
+        "quiet": True,
+    }
+
     try:
-        if not os.path.exists("downloads"):
-            os.mkdir("downloads")
+        # Remove previous file if exists
+        if os.path.exists(output_file):
+            os.remove(output_file)
 
-        ydl_opts = {
-            'format': 'bestvideo+bestaudio/best',
-            'outtmpl': 'downloads/%(title)s.%(ext)s',
-            'quiet': True,
-            'merge_output_format': 'mp4'
-        }
-
+        # Download
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            file_name = ydl.prepare_filename(info)
+            ydl.download([url])
 
-        return file_name
+        # Send to user
+        await update.message.reply_video(video=open(output_file, "rb"))
+
+        # Delete file after sending
+        os.remove(output_file)
+
     except Exception as e:
-        print("Download error:", e)
-        return None
+        await update.message.reply_text(f"Error: {e}")
 
 
-@dp.message(Command("start"))
-async def start(message: Message):
-    await message.answer("👋 Hello! Send me any YouTube or Instagram video link, and I’ll send it back in the best quality available 🎥")
+def main():
+    app = ApplicationBuilder().token(TOKEN).build()
 
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, download_video))
 
-@dp.message()
-async def handle_links(message: Message):
-    text = message.text.strip()
+    print("Bot is running...")
+    app.run_polling()
 
-    if any(x in text for x in ["youtube.com", "youtu.be", "instagram.com", "reel"]):
-        await message.answer("📥 Downloading video, please wait...")
-
-        video_path = download_video(text)
-
-        if video_path and os.path.exists(video_path):
-            try:
-                video_file = FSInputFile(video_path)
-                await message.answer_video(video=video_file)
-                os.remove(video_path)
-            except Exception as e:
-                await message.answer(f"⚠️ Could not send video: {e}")
-        else:
-            await message.answer("❌ Sorry, I couldn't download this video. It may be private or restricted.")
-
-
-async def main():
-    print("🤖 Bot is running...")
-    await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
+
